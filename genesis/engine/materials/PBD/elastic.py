@@ -31,7 +31,7 @@ class Elastic(Base):
             stretch_relaxation (float): The stretch relaxation of the cloth. Defaults to 0.1. Smaller value weakens the stretch constraint.
             bending_relaxation (float): The bending relaxation of the cloth. Defaults to 0.1. Smaller value weakens the bending constraint.
             volume_relaxation (float): The volume relaxation of the cloth. Defaults to 0.1. Smaller value weakens the volume constraint.
-            thickness (float): The thickness of the elastic material. Defaults to 1e-4. TODO: what is this?
+            thickness (float): The thickness of the elastic material. Defaults to 1e-4. TODO: what is this? Space/Time
         """
         super().__init__()
         self._rho = rho
