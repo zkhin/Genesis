@@ -8,17 +8,22 @@
 [![GitHub Discussions](https://img.shields.io/github/discussions/Genesis-Embodied-AI/Genesis)](https://github.com/Genesis-Embodied-AI/Genesis/discussions)
 
 [![README in English](https://img.shields.io/badge/English-d9d9d9)](./README.md)
+[![README en Français](https://img.shields.io/badge/Francais-d9d9d9)](./README_FR.md)
 [![简体中文版自述文件](https://img.shields.io/badge/简体中文-d9d9d9)](./README_CN.md)
+[![日本語版 README](https://img.shields.io/badge/日本語-d9d9d9)](./README_JA.md)
 
 # Genesis
+## 🔥 News
+- [2024-12-25] Added a [docker](#docker) including support for the ray-tracing renderer
+- [2024-12-24] Added guidelines for [contributing to Genesis](https://github.com/Genesis-Embodied-AI/Genesis/blob/main/CONTRIBUTING.md)
 
 ## Table of Contents
 
 1. [What is Genesis?](#what-is-genesis)
 2. [Key Features](#key-features)
 3. [Quick Installation](#quick-installation)
-4. [Documentation](#documentation)
-5. [Example Usage](#example-usage)
+4. [Docker](#docker)
+5. [Documentation](#documentation)
 6. [Contributing to Genesis](#contributing-to-genesis)
 7. [Support](#support)
 8. [License and Acknowledgments](#license-and-acknowledgments)
@@ -50,7 +55,7 @@ Project Page: <https://genesis-embodied-ai.github.io/>
 - **Wide range of material models**: Simulation and coupling of rigid bodies, liquids, gases, deformable objects, thin-shell objects, and granular materials.
 - **Compatibility with various robots**: Robotic arms, legged robots, drones, *soft robots*, and support for loading `MJCF (.xml)`, `URDF`, `.obj`, `.glb`, `.ply`, `.stl`, and more.
 - **Photo-realistic rendering**: Native ray-tracing-based rendering.
-- **Differentiability**: Genesis is designed to be fully differentiable. Currently, our MPM solver and Tool Solver support differentiability, with other solvers planned for future versions.
+- **Differentiability**: Genesis is designed to be fully differentiable. Currently, our MPM solver and Tool Solver support differentiability, with other solvers planned for future versions (starting with rigid & articulated body solver).
 - **Physics-based tactile simulation**: Differentiable [tactile sensor simulation](https://github.com/Genesis-Embodied-AI/DiffTactile) coming soon (expected in version 0.3.0).
 - **User-friendliness**: Designed for simplicity, with intuitive installation and APIs.
 
@@ -72,19 +77,25 @@ cd Genesis
 pip install -e .
 ```
 
-## Example Usage
+## Docker
 
-```python
-from genesis import Simulation
+If you want to use Genesis from Docker, you can first build the Docker image as:
 
-# Initialize a simulation
-sim = Simulation()
-
-# Run the simulation
-sim.run()
+```bash
+docker build -t genesis -f docker/Dockerfile docker
 ```
 
-This simple example demonstrates how to initialize and execute a basic simulation. For more advanced scenarios, refer to our [documentation](https://genesis-world.readthedocs.io/en/latest/user_guide/index.html).
+Then you can run the examples inside the docker image (mounted to `/workspace/examples`):
+
+```bash
+xhost +local:root # Allow the container to access the display
+
+docker run --gpus all --rm -it \
+-e DISPLAY=$DISPLAY \
+-v /tmp/.X11-unix/:/tmp/.X11-unix \
+-v $PWD:/workspace \
+genesis
+```
 
 ## Documentation
 
