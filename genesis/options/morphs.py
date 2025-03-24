@@ -40,7 +40,8 @@ class Morph(Options):
         Whether the entity needs to be considered for collision checking. Defaults to True. `visualization` and `collision` cannot both be False. **This is only used for RigidEntity.**
     requires_jac_and_IK : bool, optional
         Whether this morph, if created as `RigidEntity`, requires jacobian and inverse kinematics. Defaults to False. **This is only used for RigidEntity.**
-
+    is_free : bool, optional
+        Whether the entity is free to move. Defaults to True. **This is only used for RigidEntity.**
     """
 
     pos: tuple = (0.0, 0.0, 0.0)
@@ -49,6 +50,7 @@ class Morph(Options):
     visualization: bool = True
     collision: bool = True
     requires_jac_and_IK: bool = False
+    is_free: bool = True
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -297,7 +299,7 @@ class FileMorph(Morph):
     quat : tuple, shape (4,), optional
         The quaternion (w-x-y-z convention) of the entity. If specified, `euler` will be ignored. Defaults to None.
     convexify : bool, optional
-        Whether to convexify the entity. When convexify is True, all the meshes in the entity will each be converted to a convex hull. If not given, it defaults to `True` for `RigidEntity` and `False` for other deformable entities.
+        Whether to convexify the entity. When convexify is True, all the meshes in the entity will each be converted to a convex hull. False by default.
     visualization : bool, optional
         Whether the entity needs to be visualized. Set it to False if you need a invisible object only for collision purposes. Defaults to True. `visualization` and `collision` cannot both be False. **This is only used for RigidEntity.**
     collision : bool, optional
@@ -308,7 +310,7 @@ class FileMorph(Morph):
 
     file: Any = ""
     scale: Union[float, tuple] = 1.0
-    convexify: Optional[bool] = None
+    convexify: bool = False
     recompute_inertia: bool = False
 
     def __init__(self, **data):
@@ -357,9 +359,9 @@ class Mesh(FileMorph):
     quat : tuple, shape (4,), optional
         The quaternion (w-x-y-z convention) of the entity. If specified, `euler` will be ignored. Defaults to None.
     convexify : bool, optional
-        Whether to convexify the entity. When convexify is True, all the meshes in the entity will be converted to a convex hull. If not given, it defaults to `True` for `RigidEntity` and `False` for other deformable entities.
+        Whether to convexify the entity. When convexify is True, all the meshes in the entity will be converted to a convex hull. False by default.
     decompose_nonconvex : bool, optional
-        Whether to decompose meshes into convex components, if input mesh is nonconvex and `convexify=False`. We use coacd for this decomposition process. If not given, it defaults to `True` for `RigidEntity` and `False` for other deformable entities.
+        Whether to decompose meshes into convex components, if input mesh is nonconvex and `convexify=False`. We use coacd for this decomposition process. False by default.
     coacd_options : CoacdOptions, optional
         Options for configuring coacd convex decomposition. Needs to be a `gs.options.CoacdOptions` object.
     visualization : bool, optional
@@ -403,9 +405,9 @@ class Mesh(FileMorph):
     fixed: bool = False
     group_by_material: bool = True
     merge_submeshes_for_collision: bool = True
-    decimate: bool = True
+    decimate: bool = False
     decimate_face_num: int = 500
-    decompose_nonconvex: Optional[bool] = None
+    decompose_nonconvex: bool = False
     coacd_options: Optional[CoacdOptions] = None
 
     # FEM specific
@@ -640,8 +642,13 @@ class Terrain(Morph):
         The types of subterrains to generate. If a string, it will be repeated for all subterrains. If a 2D list, it should have the same shape as `n_subterrains`.
     height_field : array-like, optional
         The height field to generate the terrain. If specified, all other configurations will be ignored. Defaults to None.
+    name : str, optional
+        The name of the terrain to save
+    from_stored : str, optional
+        The path of the stored terrain to load
     """
 
+    is_free: bool = False
     randomize: bool = False  # whether to randomize the terrain
     n_subterrains: Tuple[int, int] = (3, 3)  # number of subterrains in x and y directions
     subterrain_size: Tuple[float, float] = (12.0, 12.0)  # meter
@@ -653,6 +660,8 @@ class Terrain(Morph):
         ["random_uniform_terrain", "pyramid_stairs_terrain", "sloped_terrain"],
     ]
     height_field: Any = None
+    name: str = "default"  # name to store and reuse the terrain
+    from_stored: Any = None
 
     def __init__(self, **data):
         super().__init__(**data)
