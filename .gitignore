@@ -1,4 +1,5 @@
 logs/
+.gitignore
 tmp/
 MUJOCO_LOG.TXT
 imgui.ini
