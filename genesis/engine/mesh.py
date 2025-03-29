@@ -10,6 +10,7 @@ import trimesh
 import genesis as gs
 import genesis.utils.mesh as mu
 import genesis.utils.particle as pu
+from genesis.ext import fast_simplification
 from genesis.repr_base import RBC
 
 
@@ -76,12 +77,19 @@ class Mesh(RBC):
             self._mesh = trimesh.convex.convex_hull(self._mesh)
         self.clear_visuals()
 
-    def decimate(self, target_face_num, convexify):
+    def decimate(self, decimate_face_num, convexify):
         """
         Decimate the mesh.
         """
-        if self._mesh.vertices.shape[0] > 3 and self._mesh.faces.shape[0] > target_face_num:
-            self._mesh = self._mesh.simplify_quadric_decimation(target_face_num)
+        if self._mesh.vertices.shape[0] > 3 and self._mesh.faces.shape[0] > decimate_face_num:
+            self._mesh = trimesh.Trimesh(
+                *fast_simplification.simplify(
+                    self._mesh.vertices,
+                    self._mesh.faces,
+                    target_count=decimate_face_num,
+                    agg=0,
+                )
+            )
 
             # need to run convexify again after decimation, because sometimes decimating a convex-mesh can make it non-convex...
             if convexify:

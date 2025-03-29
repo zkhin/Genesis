@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 import mujoco
 import genesis as gs
+import genesis.utils.geom as gu
 
 
 @dataclass
@@ -505,6 +506,10 @@ def check_mujoco_data_consistency(
     mujoco.mj_fwdVelocity(mj_sim.model, mj_sim.data)
     gs_sim.rigid_solver._kernel_forward_kinematics_links_geoms(np.array([0]))
 
+    gs_com = gs_sim.rigid_solver.links_state.COM.to_numpy()[0, 0]
+    mj_com = mj_sim.data.subtree_com[0]
+    np.testing.assert_allclose(gs_com, mj_com, atol=atol)
+
     gs_xipos = gs_sim.rigid_solver.links_state.i_pos.to_numpy()[:, 0]
     mj_xipos = mj_sim.data.xipos - mj_sim.data.subtree_com[0]
     np.testing.assert_allclose(gs_xipos[gs_body_idcs], mj_xipos[mj_body_idcs], atol=atol)
@@ -513,7 +518,14 @@ def check_mujoco_data_consistency(
     mj_xpos = mj_sim.data.xpos
     np.testing.assert_allclose(gs_xpos[gs_body_idcs], mj_xpos[mj_body_idcs], atol=atol)
 
+    gs_xquat = gs_sim.rigid_solver.links_state.quat.to_numpy()[:, 0]
+    gs_xmat = gu.quat_to_R(gs_xquat).reshape([-1, 9])
+    mj_xmat = mj_sim.data.xmat
+    np.testing.assert_allclose(gs_xmat[gs_body_idcs], mj_xmat[mj_body_idcs], atol=atol)
+
     gs_cd_vel = gs_sim.rigid_solver.links_state.cd_vel.to_numpy()[:, 0]
+    gs_cd_vel_ = gs_sim.rigid_solver.links_state.vel.to_numpy()[:, 0]
+    np.testing.assert_allclose(gs_cd_vel, gs_cd_vel_, atol=atol)
     mj_cd_vel = mj_sim.data.cvel[:, 3:]
     np.testing.assert_allclose(gs_cd_vel[gs_body_idcs], mj_cd_vel[mj_body_idcs], atol=atol)
     gs_cd_ang = gs_sim.rigid_solver.links_state.cd_ang.to_numpy()[:, 0]
@@ -549,21 +561,22 @@ def check_mujoco_data_consistency(
     np.testing.assert_allclose(gs_cinr_mass[gs_body_idcs], mj_cinr_mass[mj_body_idcs], atol=atol)
 
 
-def simulate_and_check_mujoco_consistency(gs_sim, mj_sim, qpos=None, qvel=None, *, num_steps):
+def simulate_and_check_mujoco_consistency(gs_sim, mj_sim, qpos=None, qvel=None, atol=1e-9, *, num_steps):
     # Get mapping between Mujoco and Genesis
     _, (_, _, mj_q_idcs, mj_dof_idcs, _) = _get_model_mappings(gs_sim, mj_sim)
 
     # Make sure that "static" model information are matching
-    check_mujoco_model_consistency(gs_sim, mj_sim)
+    check_mujoco_model_consistency(gs_sim, mj_sim, atol=atol)
 
     # Initialize the simulation
     init_simulators(gs_sim, mj_sim, qpos, qvel)
 
     # Run the simulation for a few steps
     qvel_prev = None
+
     for i in range(num_steps):
         # Make sure that all "dynamic" quantities are matching before stepping
-        check_mujoco_data_consistency(gs_sim, mj_sim, qvel_prev=qvel_prev)
+        check_mujoco_data_consistency(gs_sim, mj_sim, qvel_prev=qvel_prev, atol=atol)
 
         # Keep Mujoco and Genesis simulation in sync to avoid drift over time
         mj_sim.data.qpos[mj_q_idcs] = gs_sim.rigid_solver.qpos.to_numpy()[:, 0]

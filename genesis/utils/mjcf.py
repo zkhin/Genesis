@@ -1,4 +1,5 @@
 import os
+from bisect import bisect_right
 
 import numpy as np
 import trimesh
@@ -154,50 +155,73 @@ def parse_link(mj, i_l, scale):
         j_info["dofs_kv"] = np.zeros((n_dofs,), dtype=gs.np_float)
         j_info["dofs_force_range"] = np.zeros((n_dofs, 2), dtype=gs.np_float)
 
-        for i_a in range(len(mj.actuator_trnid)):
-            if mj.actuator_trnid[i_a, 0] == i_j:
-                trntype = mujoco.mjtTrn(mj.actuator_trntype[i_a])
-                if trntype != mujoco.mjtTrn.mjTRN_JOINT:
-                    gs.logger.warning(f"(MJCF) Actuator type '{trntype}' not supported")
-                    break
-                if mj.actuator_dyntype[i_a] != mujoco.mjtDyn.mjDYN_NONE:
-                    gs.logger.warning(f"(MJCF) Actuator internal dynamics not supported")
-                    break
-                gaintype = mujoco.mjtGain(mj.actuator_gaintype[i_a])
-                if gaintype != mujoco.mjtGain.mjGAIN_FIXED:
-                    gs.logger.warning(f"(MJCF) Actuator control gain of type '{gaintype}' not supported")
-                    break
-                biastype = mujoco.mjtBias(mj.actuator_biastype[i_a])
-                if biastype not in (mujoco.mjtBias.mjBIAS_NONE, mujoco.mjtBias.mjBIAS_AFFINE):
-                    gs.logger.warning(f"(MJCF) Actuator control bias of type '{biastype}' not supported")
-                    break
-                if n_dofs > 1 and not (mj.actuator_gear[i_a, :n_dofs] == 1.0).all():
-                    gs.logger.warning("(MJCF) Actuator transmission gear is only supported of 1DoF joints")
-                    break
+        i_a = -1
+        try:
+            actuator_mask_j = (mj.actuator_trnid[:, 0] == i_j) & (mj.actuator_trntype == mujoco.mjtTrn.mjTRN_JOINT)
+            if actuator_mask_j.any():
+                (i_a,) = np.nonzero(actuator_mask_j)[0]
+            else:  # No actuator directly attached to the joint via mechanical transmission
+                # Special case where all tendon are attached to joint. Very common in practice.
+                if (mj.wrap_type == mujoco.mjtWrap.mjWRAP_JOINT).all():
+                    if i_j in mj.wrap_objid:
+                        (m,) = np.nonzero(mj.wrap_objid == i_j)[0]
+                        i_t = bisect_right(np.cumsum(mj.tendon_num), m)
+                        actuator_mask_t = (mj.actuator_trnid[:, 0] == i_t) & (
+                            mj.actuator_trntype == mujoco.mjtTrn.mjTRN_TENDON
+                        )
+                        (i_a,) = np.nonzero(actuator_mask_t)[0]
+                        gs.logger.warning(f"(MJCF) Approximating tendon by joint actuator for `{j_info['name']}`")
+        except ValueError:
+            gs.logger.warning(f"(MJCF) Failed to parse actuator for joint `{j_info['name']}`.")
 
-                if biastype == mujoco.mjtBias.mjBIAS_NONE:
-                    # Direct-drive
-                    actuator_kp = 0.0
-                    actuator_kv = 0.0
-                else:  # this must be affine
-                    # PD control
-                    gainprm = mj.actuator_gainprm[i_a]
-                    biasprm = mj.actuator_biasprm[i_a]
-                    if gainprm[0] != -biasprm[1] or gainprm[1:].any() or biasprm[0]:
-                        gs.logger.warning("(MJCF) Actuator gain and bias cannot be reduced to PD control")
-                        break
-                    actuator_kp, actuator_kv = biasprm[1:3]
+        if i_a >= 0:
+            if mj.actuator_dyntype[i_a] != mujoco.mjtDyn.mjDYN_NONE:
+                gs.logger.warning(f"(MJCF) Actuator internal dynamics not supported")
+            gaintype = mujoco.mjtGain(mj.actuator_gaintype[i_a])
+            if gaintype != mujoco.mjtGain.mjGAIN_FIXED:
+                gs.logger.warning(f"(MJCF) Actuator control gain of type '{gaintype}' not supported")
+            biastype = mujoco.mjtBias(mj.actuator_biastype[i_a])
+            if biastype not in (mujoco.mjtBias.mjBIAS_NONE, mujoco.mjtBias.mjBIAS_AFFINE):
+                gs.logger.warning(f"(MJCF) Actuator control bias of type '{biastype}' not supported")
+            if n_dofs > 1 and not (mj.actuator_gear[i_a, :n_dofs] == 1.0).all():
+                gs.logger.warning("(MJCF) Actuator transmission gear is only supported of 1DoF joints")
 
-                gear = mj.actuator_gear[i_a, 0]
-                j_info["dofs_kp"] = np.tile(-gear * actuator_kp, (n_dofs,))
-                j_info["dofs_kv"] = np.tile(-gear * actuator_kv, (n_dofs,))
-                if mj.actuator_forcelimited[i_a]:
-                    j_info["dofs_force_range"] = np.tile(mj.actuator_forcerange[i_a], (n_dofs, 1))
-                if mj.actuator_ctrllimited[i_a] and biastype == mujoco.mjtBias.mjBIAS_NONE:
-                    j_info["dofs_force_range"] = np.minimum(
-                        j_info["dofs_force_range"], np.tile(gear * mj.actuator_ctrlrange[i_a], (n_dofs, 1))
+            if biastype == mujoco.mjtBias.mjBIAS_NONE:
+                # Direct-drive
+                actuator_kp = 0.0
+                actuator_kv = 0.0
+            else:  # U = gain_term * ctrl + bias_term
+                # PD control
+                gainprm = mj.actuator_gainprm[i_a]
+                biasprm = mj.actuator_biasprm[i_a]
+                if gainprm[1:].any() or biasprm[0]:
+                    gs.logger.warning(
+                        "(MJCF) Actuator control gain and bias parameters not supported. Using default values."
                     )
-                break
+                    actuator_kp = gu.default_dofs_kp(1)[0]
+                    actuator_kv = gu.default_dofs_kv(1)[0]
+                elif gainprm[0] != -biasprm[1]:
+                    # Doing our best to approximate the expected behavior: g0 * p_target + b1 * p_mes + b2 * v_mes
+                    gs.logger.warning(
+                        "(MJCF) Actuator control gain and bias parameters cannot be reduced to a unique PD control "
+                        "position gain. Using max between gain and bias."
+                    )
+                    actuator_kp = min(-gainprm[0], biasprm[1])
+                    actuator_kv = biasprm[2]
+                else:
+                    actuator_kp, actuator_kv = biasprm[1], biasprm[2]
+
+            gear = mj.actuator_gear[i_a, 0]
+            j_info["dofs_kp"] = np.tile(-gear * actuator_kp, (n_dofs,))
+            j_info["dofs_kv"] = np.tile(-gear * actuator_kv, (n_dofs,))
+            if mj.actuator_forcelimited[i_a]:
+                j_info["dofs_force_range"] = np.tile(mj.actuator_forcerange[i_a], (n_dofs, 1))
+            if mj.actuator_ctrllimited[i_a] and biastype == mujoco.mjtBias.mjBIAS_NONE:
+                j_info["dofs_force_range"] = np.minimum(
+                    j_info["dofs_force_range"], np.tile(gear * mj.actuator_ctrlrange[i_a], (n_dofs, 1))
+                )
+        else:
+            gs.logger.debug(f"(MJCF) No actuator found for joint `{j_info['name']}`")
 
         j_infos.append(j_info)
 
@@ -209,6 +233,8 @@ def parse_link(mj, i_l, scale):
     l_info["invweight"] /= scale**3
     for j_info in j_infos:
         j_info["pos"] *= scale
+    # exclude joints with 0 dofs in MJCF models to align with mujoco
+    j_infos = [j_info for j_info in j_infos if j_info["n_dofs"] > 0]
 
     return l_info, j_infos
 
@@ -226,7 +252,7 @@ def parse_links(mj, scale):
     return l_infos, j_infos
 
 
-def parse_geom(mj, i_g, scale, convexify, surface, xml_path):
+def parse_geom(mj, i_g, scale, surface, xml_path):
     mj_geom = mj.geom(i_g)
 
     geom_size = mj_geom.size
@@ -362,18 +388,9 @@ def parse_geom(mj, i_g, scale, convexify, surface, xml_path):
         gs.logger.warning(f"Unsupported MJCF geom type '{mj_geom.type}'.")
         return None
 
-    # Turn on convexify for all primitive shapes
-    if mj_geom.type != mujoco.mjtGeom.mjGEOM_MESH:
-        convexify = True
-
-    # Disable convexify for visual geometries
-    if not is_col:
-        convexify = False
-
     mesh = gs.Mesh.from_trimesh(
         tmesh,
         scale=scale,
-        convexify=convexify,
         surface=gs.surfaces.Collision() if is_col else surface,
     )
 
@@ -390,7 +407,6 @@ def parse_geom(mj, i_g, scale, convexify, surface, xml_path):
         "contype": mj_geom.contype[0],
         "conaffinity": mj_geom.conaffinity[0],
         "group": mj_geom.group[0],
-        "is_convex": convexify,
         "data": geom_size,
         "friction": mj_geom.friction[0],
         "sol_params": np.concatenate((mj_geom.solref, mj_geom.solimp)),
@@ -403,7 +419,7 @@ def parse_geom(mj, i_g, scale, convexify, surface, xml_path):
     return info
 
 
-def parse_geoms(mj, scale, convexify, surface, xml_path):
+def parse_geoms(mj, scale, surface, xml_path):
     links_g_info = [[] for _ in range(mj.nbody)]
 
     # Loop over all geometries sequentially
@@ -413,7 +429,7 @@ def parse_geoms(mj, scale, convexify, surface, xml_path):
             continue
 
         # try parsing a given geometry
-        g_info = parse_geom(mj, i_g, scale, convexify, surface, xml_path)
+        g_info = parse_geom(mj, i_g, scale, surface, xml_path)
         if g_info is None:
             continue
 
@@ -460,19 +476,22 @@ def parse_equality(mj, i_e, scale, ordered_links_idx):
     mj_equality = mj.equality(i_e)
     e_info["name"] = mj_equality.name
 
+    e_info["eq_data"] = mj.eq_data[i_e]
+    e_info["eq_data"][:6] *= scale
+    e_info["sol_params"] = np.concatenate((mj.eq_solref[i_e], mj.eq_solimp[i_e]))
+
     if mj.eq_type[i_e] == mujoco.mjtEq.mjEQ_CONNECT:
         e_info["type"] = gs.EQUALITY_TYPE.CONNECT
-        e_info["link1_idx"] = -1 if mj.eq_obj1id[i_e] == 0 else ordered_links_idx.index(mj.eq_obj1id[i_e] - 1)
-        e_info["link2_idx"] = -1 if mj.eq_obj2id[i_e] == 0 else ordered_links_idx.index(mj.eq_obj2id[i_e] - 1)
-        e_info["anchor1_pos"] = mj.eq_data[i_e][0:3] * scale
-        e_info["anchor2_pos"] = mj.eq_data[i_e][3:6] * scale
-        e_info["rel_pose"] = mj.eq_data[i_e][6:10]
-        e_info["torque_scale"] = mj.eq_data[i_e][10]
-        e_info["sol_params"] = np.concatenate((mj.eq_solref[i_e], mj.eq_solimp[i_e]))
-
+        e_info["eq_obj1id"] = -1 if mj.eq_obj1id[i_e] == 0 else ordered_links_idx.index(mj.eq_obj1id[i_e] - 1)
+        e_info["eq_obj2id"] = -1 if mj.eq_obj2id[i_e] == 0 else ordered_links_idx.index(mj.eq_obj2id[i_e] - 1)
     elif mj.eq_type[i_e] == mujoco.mjtEq.mjEQ_WELD:
         e_info["type"] = gs.EQUALITY_TYPE.WELD
+        e_info["eq_obj1id"] = -1 if mj.eq_obj1id[i_e] == 0 else ordered_links_idx.index(mj.eq_obj1id[i_e] - 1)
+        e_info["eq_obj2id"] = -1 if mj.eq_obj2id[i_e] == 0 else ordered_links_idx.index(mj.eq_obj2id[i_e] - 1)
     elif mj.eq_type[i_e] == mujoco.mjtEq.mjEQ_JOINT:
+        e_info["eq_obj1id"] = mj.eq_obj1id[i_e]
+        e_info["eq_obj2id"] = mj.eq_obj2id[i_e]
+        # y -y0 = a0 + a1 * (x-x0) + a2 * (x-x0)^2 + a3 * (x-x0)^3 + a4 * (x-x0)^4
         e_info["type"] = gs.EQUALITY_TYPE.JOINT
     else:
         raise gs.raise_exception(f"Unsupported MJCF equality type: {mj.eq_type[i_e]}")
