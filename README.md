@@ -87,6 +87,12 @@ cd Genesis
 pip install -e .
 ```
 
+To run the new test for runtime environment switching and circumvention mechanisms, use the following command:
+
+```bash
+pytest tests/test_runtime_switching.py
+```
+
 ## Docker
 
 If you want to use Genesis from Docker, you can first build the Docker image as:
