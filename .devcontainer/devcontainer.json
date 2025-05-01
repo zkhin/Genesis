@@ -1,0 +1,7 @@
+{
+  "tasks": {
+    "test": "pytest",
+    "build": "pip install -e . && pip install pre-commit && pre-commit install",
+    "launch": "docker build -t genesis -f docker/Dockerfile docker && xhost +local:root && docker run --gpus all --rm -it -e DISPLAY=$DISPLAY -v /tmp/.X11-unix/:/tmp/.X11-unix -v $PWD:/workspace genesis"
+  }
+}
