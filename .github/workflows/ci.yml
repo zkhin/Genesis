@@ -51,7 +51,8 @@ jobs:
             python -m pip install --no-index --find-links . ompl && \
             pip install -e . && \
             pytest -v tests && \
-            pytest -v -m 'benchmarks' tests"
+            pytest -v -m 'benchmarks' tests && \
+            pytest -v tests/test_runtime_switching.py"
 
           mkdir -p ./artifacts
           docker cp "$container_id:/app/speed_test.txt" "./artifacts/speed_test_${artifacts_id}.txt"

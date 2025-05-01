@@ -115,4 +115,8 @@ COPY 10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
 COPY nvidia_icd.json /usr/share/vulkan/icd.d/nvidia_icd.json
 COPY nvidia_layers.json /etc/vulkan/implicit_layer.d/nvidia_layers.json
 
+# --------------------- Run Tests ---------------------
+COPY tests/test_runtime_switching.py /workspace/Genesis/tests/test_runtime_switching.py
+RUN pytest /workspace/Genesis/tests/test_runtime_switching.py
+
 ENTRYPOINT ["/bin/bash"]
