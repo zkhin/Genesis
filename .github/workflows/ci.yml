@@ -62,7 +62,7 @@ jobs:
           cat "./artifacts/speed_test_${artifacts_id}.txt"
 
       - name: Upload Test Results as Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: speed-test-results
           path: "artifacts/speed_test_${{ env.artifacts_id }}.txt"
