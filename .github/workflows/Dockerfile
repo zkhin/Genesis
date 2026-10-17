@@ -1,5 +1,5 @@
 # Start with a base image that includes CUDA
-FROM nvidia/cuda:11.3.1-cudnn8-runtime-ubuntu20.04
+FROM nvidia/cuda:12.2.2-cudnn8-runtime-ubuntu20.04
 
 # Label the image
 LABEL description="Python 3.11 with PyTorch, CUDA support, and a user named ci with sudo access"
