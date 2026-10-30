@@ -14,7 +14,7 @@ dependencies = [
     "psutil",
     "scikit-image",
     "taichi >= 1.7.2",
-    "pydantic == 2.7.1",
+    "pydantic ==2.14.2",
     "numpy >= 1.26.4",
     "six",
     "PyOpenGL>=3.1.4",
